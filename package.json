@@ -1,0 +1,30 @@
+{
+  "name": "homebridge-gems-bulb",
+  "version": "0.0.1",
+  "description": "Homebridge plugin for GEMS Smart LED Light Bulb",
+  "main": "index.js",
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zackelia/homebridge-gems-bulb.git"
+  },
+  "keywords": [
+    "homebridge-plugin"
+  ],
+  "author": "Zack Elia",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/zackelia/homebridge-gems-bulb/issues"
+  },
+  "homepage": "https://github.com/zackelia/homebridge-gems-bulb#readme",
+  "engines": {
+    "node": ">=0.12.0",
+    "homebridge": ">=0.2.0"
+  },
+  "dependencies": {
+    "noble": "1.8.0"
+  }
+}
