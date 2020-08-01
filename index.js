@@ -2,7 +2,7 @@ var Service;
 var Characteristic;
 var HomebridgeAPI;
 var convert = require("./convert");
-var noble = require('noble');
+var noble = require('@abandonware/noble');
 
 module.exports = function(homebridge) {
     Service = homebridge.hap.Service;
