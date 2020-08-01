@@ -72,7 +72,7 @@ GemsBulb.prototype.findBulb = function(mac, callback) {
 }
 
 GemsBulb.prototype.attemptConnect = function(callback){
-  var buffer = new Buffer([0x6d, 0x6b, 0x3a, 0x30, 0x30, 0x30, 0x30])
+  var buffer = Buffer.from([0x6d, 0x6b, 0x3a, 0x30, 0x30, 0x30, 0x30])
 
   if (this.peripheral && this.peripheral.state == "connected") {
     this.peripheral.writeHandle(this.handle, buffer, true, function (error) {
@@ -112,7 +112,7 @@ GemsBulb.prototype.updateColor = function(callback) {
       buffer.push(0x3a);
     }
 
-    buffer = new Buffer(buffer);
+    buffer = Buffer.from(buffer);
     that.peripheral.writeHandle(that.handle, buffer, true, function (error) {
       if (error) that.log('BLE: Write handle Error: ' + error);
       callback();
@@ -128,9 +128,9 @@ GemsBulb.prototype.setState = function(status, callback) {
           callback(new Error());
           return;
       }
-      var buffer = new Buffer([0x63, 0x6c, 0x6f, 0x73, 0x65])
+      var buffer = Buffer.from([0x63, 0x6c, 0x6f, 0x73, 0x65])
       if (status) {
-        buffer = new Buffer([0x6f, 0x70, 0x65, 0x6e])
+        buffer = Buffer.from([0x6f, 0x70, 0x65, 0x6e])
       }
 
       that.peripheral.writeHandle(that.handle, buffer, true, function (error) {
