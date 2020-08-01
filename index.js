@@ -1,13 +1,8 @@
-var Service;
-var Characteristic;
-var HomebridgeAPI;
-var convert = require("./convert");
-var noble = require('@abandonware/noble');
+const utils = require('./utils');
+const noble = require('@abandonware/noble');
 
-module.exports = function(homebridge) {
-    Service = homebridge.hap.Service;
-    Characteristic = homebridge.hap.Characteristic;
-    homebridge.registerAccessory("homebridge-gems-bulb", "GemsBulb", GemsBulb);
+module.exports = function(api) {
+    api.registerAccessory('homebridge-gems-bulb', 'GemsBulb', GemsBulb);
 };
 
 function GemsBulb(log, config, api) {
@@ -15,102 +10,140 @@ function GemsBulb(log, config, api) {
   this.config = config
   this.api = api
 
-  this.handle = 37
+  this.Service = this.api.hap.Service;
+  this.Characteristic = this.api.hap.Characteristic;
 
   this.state = true
   this.hue = 0
   this.saturation = 100
   this.brightness = 100
+  this.handle = 0x25
 
-  this.findBulb(this.config.mac);
+  this.discover();
 
-  this.informationService = new Service.AccessoryInformation();
+  this.informationService = new this.Service.AccessoryInformation();
+  this.service = new this.Service.Lightbulb(this.config.name);
 
   this.informationService
-      .setCharacteristic(Characteristic.Manufacturer, "BEKEN")
-      .setCharacteristic(Characteristic.Model, "GEMS Smart LED Light Bulb")
-      .setCharacteristic(Characteristic.SerialNumber, "123-45-6789");
+    .setCharacteristic(this.Characteristic.Manufacturer, 'BEKEN')
+    .setCharacteristic(this.Characteristic.Model, 'BT 4.0')
+    .setCharacteristic(this.Characteristic.SerialNumber, '123-45-6789');
 
-  this.service = new Service.Lightbulb(this.config.name);
+  // Required Characteristics
+  this.service.getCharacteristic(this.Characteristic.On)
+    .on('get', this.handleOnGet.bind(this));
+  this.service.getCharacteristic(this.Characteristic.On)
+    .on('set', this.handleOnSet.bind(this));
 
-  this.service.getCharacteristic(Characteristic.On)
-      .on('get', this.getState.bind(this));
-  this.service.getCharacteristic(Characteristic.On)
-      .on('set', this.setState.bind(this));
+  // Optional Characteristics
+  this.service.getCharacteristic(this.Characteristic.Brightness)
+    .on('get', this.handleBrightnessGet.bind(this));
+  this.service.getCharacteristic(this.Characteristic.Brightness)
+    .on('set', this.handleBrightnessSet.bind(this));
 
-  this.service.getCharacteristic(Characteristic.Hue)
-      .on('get', this.getHue.bind(this));
-  this.service.getCharacteristic(Characteristic.Hue)
-      .on('set', this.setHue.bind(this));
+  this.service.getCharacteristic(this.Characteristic.Hue)
+    .on('get', this.handleHueGet.bind(this));
+  this.service.getCharacteristic(this.Characteristic.Hue)
+    .on('set', this.handleHueSet.bind(this));
 
-  this.service.getCharacteristic(Characteristic.Saturation)
-      .on('get', this.getSaturation.bind(this));
-  this.service.getCharacteristic(Characteristic.Saturation)
-      .on('set', this.setSaturation.bind(this));
-
-  this.service.getCharacteristic(Characteristic.Brightness)
-      .on('get', this.getBrightness.bind(this));
-  this.service.getCharacteristic(Characteristic.Brightness)
-      .on('set', this.setBrightness.bind(this));
+  this.service.getCharacteristic(this.Characteristic.Saturation)
+    .on('get', this.handleSaturationGet.bind(this));
+  this.service.getCharacteristic(this.Characteristic.Saturation)
+    .on('set', this.handleSaturationSet.bind(this));
 }
 
-GemsBulb.prototype.findBulb = function(mac, callback) {
+/**
+ * Scan for the bulb using its MAC address. If the bulb is discovered, set up
+ * events for it.
+ */
+GemsBulb.prototype.discover = function() {
   var that = this;
+
   noble.on('stateChange', function(state) {
     if (state === 'poweredOn') {
-        noble.startScanning();
+      noble.startScanning();
     } else {
-        noble.stopScanning();
+      noble.stopScanning();
     }
   });
+
   noble.on('discover', function(peripheral) {
-    mac = mac.toLowerCase()
-    if (peripheral.id === mac || peripheral.address === mac) {
-        that.log("found my bulb");
-        that.peripheral = peripheral;
-        that.api.on('shutdown', function() {
-          that.peripheral.disconnect(function() {
-            that.log('disconnected bulb');
-          });
-        });
+    if (peripheral.address.toUpperCase() === that.config.mac) {
+      noble.stopScanning();
+
+      that.log("Discovered bulb")
+      that.peripheral = peripheral;
+
+      // Set up connect/disconnect events
+      that.peripheral.once('connect', function() {
+        that.log("Connected!")
+      })
+
+      that.peripheral.once('disconnect', function() {
+        that.log("Disconnected...")
+      })
+
+      // Attempt graceful disconnect on shutdown
+      that.api.on('shutdown', function() {
+        that.peripheral.disconnect();
+      });
     }
   });
 }
 
-GemsBulb.prototype.attemptConnect = function(callback){
-  var buffer = Buffer.from([0x6d, 0x6b, 0x3a, 0x30, 0x30, 0x30, 0x30])
+/**
+ * If the bulb is not connected, attempt to connect and send bytes to enable.
+ * The callback should have a result parameter to indicate if connection was
+ * successful.
+ */
+GemsBulb.prototype.reconnect = function(callback) {
+  var that = this;
 
-  if (this.peripheral && this.peripheral.state == "connected") {
-    this.peripheral.writeHandle(this.handle, buffer, true, function (error) {
-      callback(true);
-    });
-  } else if (this.peripheral && this.peripheral.state == "disconnected") {
-      this.log("lost connection to bulb. attempting reconnect ...");
-      var that = this;
-      this.peripheral.connect(function(error) {
-          if (!error) {
-              that.log("reconnect was successful");
-              that.peripheral.writeHandle(that.handle, buffer, true, function (error) {
-                callback(true);
-              });
-           } else {
-              that.log("reconnect was unsuccessful");
-              callback(false);
-          }
-      });
+  // Do nothing if already connected
+  if (this.peripheral && this.peripheral.state === 'connected') {
+    callback(true);
+  } else {
+    // Bytes "mk:0000" must be sent before the light acknowledges anything
+    // else after connecting
+    var buffer = Buffer.from([0x6d, 0x6b, 0x3a, 0x30, 0x30, 0x30, 0x30]);
+
+    this.peripheral.connect(function(error) {
+      if (error) {
+        that.log(error);
+        callback(false);
+        return;
+      }
+      that.peripheral.writeHandle(that.handle, buffer, false, function(error) {
+        if (error) {
+          that.log(error);
+          callback(false);
+          return;
+        }
+        callback(true);
+      })
+    })
   }
 }
 
-GemsBulb.prototype.updateColor = function(callback) {
+/**
+ * Wrapper to convert values from HomeKit to an RGB value for the bulb to
+ * understand and change the bulb color.
+ */
+GemsBulb.prototype.setColor = function(callback) {
   var that = this;
-  var temp = function(res) {
-    if (!that.peripheral || !res) {
-      callback(new Error());
-      return;
-    }
-    var buffer = [0x63, 0x74, 0x6c, 0x3a, 0x31, 0x3a]
-    var rgb = convert.hslToRgb(that.hue, that.saturation, that.brightness);
 
+  var anon = function(result) {
+    if (!result) {
+      callback(new Error());
+      return
+    }
+
+    // Bytes to change color are of format "ctl:1:r:g:b"
+    var buffer = [0x63, 0x74, 0x6c, 0x3a, 0x31, 0x3a]
+    var rgb = utils.hslToRgb(that.hue, that.saturation, that.brightness);
+
+    // Each individual number in a value must be converted, e.g. for red value
+    // 123, it must iterate 1, 2, and 3
     for (const color of rgb) {
       for (const char of color.toString()) {
         buffer.push(char.charCodeAt(0));
@@ -119,72 +152,83 @@ GemsBulb.prototype.updateColor = function(callback) {
     }
 
     buffer = Buffer.from(buffer);
-    that.peripheral.writeHandle(that.handle, buffer, true, function (error) {
-      if (error) that.log('BLE: Write handle Error: ' + error);
-      callback();
+    that.peripheral.writeHandle(that.handle, buffer, false, function (error) {
+      if (error) {
+        that.log(error);
+        callback(new Error());
+        return
+      }
+      callback(null);
     });
   }
-  this.attemptConnect(temp);
-}
 
-GemsBulb.prototype.setState = function(status, callback) {
-  var that = this;
-  var temp = function(res) {
-      if (!that.peripheral || !res) {
-          callback(new Error());
-          return;
-      }
-      var buffer = Buffer.from([0x63, 0x6c, 0x6f, 0x73, 0x65])
-      if (status) {
-        buffer = Buffer.from([0x6f, 0x70, 0x65, 0x6e])
-      }
-
-      that.peripheral.writeHandle(that.handle, buffer, true, function (error) {
-          if (error) that.log('BLE: Write handle Error: ' + error);
-          callback();
-      });
-  };
-  this.attemptConnect(temp);
-  this.state = status;
-};
-
-GemsBulb.prototype.getState = function(callback) {
-  callback(null, this.state);
-};
-
-GemsBulb.prototype.setHue = function(hue, callback) {
-  this.hue = hue
-  this.updateColor(function () {
-    callback();
-  });
-}
-
-GemsBulb.prototype.getHue = function(callback) {
-  callback(null, this.hue);
-}
-
-GemsBulb.prototype.setSaturation = function(saturation, callback) {
-  this.saturation = saturation
-  this.updateColor(function () {
-    callback();
-  });
-}
-
-GemsBulb.prototype.getSaturation = function(callback) {
-  callback(null, this.brightness);
-}
-
-GemsBulb.prototype.setBrightness = function(brightness, callback) {
-  this.brightness = brightness
-  this.updateColor(function () {
-    callback();
-  });
-}
-
-GemsBulb.prototype.getBrightness = function(callback) {
-  callback(null, this.brightness);
+  this.reconnect(anon);
 }
 
 GemsBulb.prototype.getServices = function() {
   return [this.informationService, this.service];
-};
+}
+
+/* Required Characteristic Handles */
+
+GemsBulb.prototype.handleOnGet = function(callback) {
+  callback(null, this.state);
+}
+
+GemsBulb.prototype.handleOnSet = function(on, callback) {
+  var that = this;
+
+  var anon = function(result) {
+    if (!result) {
+      callback(new Error());
+      return
+    }
+
+    // Bytes to change on/off are "open"/"close"
+    var buffer = Buffer.from([0x63, 0x6c, 0x6f, 0x73, 0x65])
+    if (on) {
+      buffer = Buffer.from([0x6f, 0x70, 0x65, 0x6e])
+    }
+
+    that.peripheral.writeHandle(that.handle, buffer, false, function (error) {
+      if (error) {
+        that.log(error);
+        callback(new Error());
+        return
+      }
+      callback(null);
+      this.state = on;
+    });
+  };
+
+  this.reconnect(anon);
+}
+
+/* Optional Characteristic Handles */
+
+GemsBulb.prototype.handleBrightnessGet = function(callback) {
+  callback(null, this.brightness);
+}
+
+GemsBulb.prototype.handleBrightnessSet = function(brightness, callback) {
+  this.brightness = brightness
+  this.setColor(callback);
+}
+
+GemsBulb.prototype.handleHueGet = function(callback) {
+  callback(null, this.hue);
+}
+
+GemsBulb.prototype.handleHueSet = function(hue, callback) {
+  this.hue = hue
+  this.setColor(callback);
+}
+
+GemsBulb.prototype.handleSaturationGet = function(callback) {
+  callback(null, this.brightness);
+}
+
+GemsBulb.prototype.handleSaturationSet = function(saturation, callback) {
+  this.saturation = saturation
+  this.setColor(callback);
+}
