@@ -10,9 +10,10 @@ module.exports = function(homebridge) {
     homebridge.registerAccessory("homebridge-gems-bulb", "GemsBulb", GemsBulb);
 };
 
-function GemsBulb(log, config) {
+function GemsBulb(log, config, api) {
   this.log = log
   this.config = config
+  this.api = api
 
   this.handle = 37
 
@@ -67,6 +68,11 @@ GemsBulb.prototype.findBulb = function(mac, callback) {
     if (peripheral.id === mac || peripheral.address === mac) {
         that.log("found my bulb");
         that.peripheral = peripheral;
+        that.api.on('shutdown', function() {
+          that.peripheral.disconnect(function() {
+            that.log('disconnected bulb');
+          });
+        });
     }
   });
 }
