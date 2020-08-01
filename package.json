@@ -1,6 +1,6 @@
 {
   "name": "homebridge-gems-bulb",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Homebridge plugin for GEMS Smart LED Light Bulb",
   "main": "index.js",
   "devDependencies": {},
@@ -25,6 +25,6 @@
     "homebridge": ">=0.2.0"
   },
   "dependencies": {
-    "noble": "1.8.0"
+    "@abandonware/noble": "1.9.2-9"
   }
 }
