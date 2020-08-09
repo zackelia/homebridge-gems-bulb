@@ -117,7 +117,7 @@ GemsBulb.prototype.reconnect = function(callback) {
         callback(false);
         return;
       }
-      that.peripheral.writeHandle(that.handle, buffer, false, function(error) {
+      that.peripheral.writeHandle(that.handle, buffer, true, function(error) {
         if (error) {
           that.log(error);
           callback(false);
@@ -156,7 +156,7 @@ GemsBulb.prototype.setColor = function(callback) {
     }
 
     buffer = Buffer.from(buffer);
-    that.peripheral.writeHandle(that.handle, buffer, false, function (error) {
+    that.peripheral.writeHandle(that.handle, buffer, true, function (error) {
       if (error) {
         that.log(error);
         callback(new Error());
@@ -194,7 +194,7 @@ GemsBulb.prototype.handleOnSet = function(on, callback) {
       buffer = Buffer.from([0x6f, 0x70, 0x65, 0x6e])
     }
 
-    that.peripheral.writeHandle(that.handle, buffer, false, function (error) {
+    that.peripheral.writeHandle(that.handle, buffer, true, function (error) {
       if (error) {
         that.log(error);
         callback(new Error());
