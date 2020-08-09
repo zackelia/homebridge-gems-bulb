@@ -117,6 +117,7 @@ GemsBulb.prototype.reconnect = function(callback) {
         callback(false);
         return;
       }
+      that.log.debug("Wrote:", buffer.toString());
       that.peripheral.writeHandle(that.handle, buffer, true, function(error) {
         if (error) {
           that.log(error);
@@ -162,6 +163,7 @@ GemsBulb.prototype.setColor = function(callback) {
         callback(new Error());
         return
       }
+      that.log.debug("Wrote:", buffer.toString());
       callback(null);
     });
   }
@@ -200,8 +202,9 @@ GemsBulb.prototype.handleOnSet = function(on, callback) {
         callback(new Error());
         return
       }
-      callback(null);
       that.state = on;
+      that.log.debug("Wrote:", buffer.toString());
+      callback(null);
     });
   };
 
