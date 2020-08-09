@@ -201,7 +201,7 @@ GemsBulb.prototype.handleOnSet = function(on, callback) {
         return
       }
       callback(null);
-      this.state = on;
+      that.state = on;
     });
   };
 
