@@ -81,10 +81,14 @@ GemsBulb.prototype.discover = function() {
 
       that.peripheral.once('disconnect', function() {
         that.log("Disconnected...")
+        if (!that.shutdown) {
+          noble.startScanning();
+        }
       })
 
       // Attempt graceful disconnect on shutdown
       that.api.on('shutdown', function() {
+        that.shutdown = true;
         that.peripheral.disconnect();
       });
     }
